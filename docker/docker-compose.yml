@@ -1,0 +1,21 @@
+
+services:
+  px4-offboard:
+    build:
+      context: .
+      dockerfile: px4_offboard.Dockerfile   
+      args:
+        ROS_DISTRO: humble
+    image: px4-offboard:latest
+    container_name: px4-offboard
+    network_mode: host         
+    stdin_open: true
+    tty: true
+    environment:
+      - ROS_DISTRO=humble
+      - DISPLAY=${DISPLAY}     
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - ../:/ros2_ws/src/px4-offboard
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${HOME}/.Xauthority:/root/.Xauthority:rw
