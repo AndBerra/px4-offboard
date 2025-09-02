@@ -44,27 +44,35 @@ import os
 
 
 def generate_launch_description():
-    package_dir = get_package_share_directory('px4_offboard')
+    package_dir = get_package_share_directory("px4_offboard")
 
     # Declare the namespace argument (it can be provided when launching)
-    namespace = LaunchConfiguration('namespace', default='px4_offboard')
+    namespace = LaunchConfiguration("namespace", default="px4_offboard")
 
-    return LaunchDescription([
-        DeclareLaunchArgument(
-            'namespace',
-            default_value='px4_offboard',
-            description='Namespace of the nodes'
-        ),
-        Node(
-            package='px4_offboard',
-            namespace=namespace,
-            executable='offboard_control',
-            name='control',
-            parameters= [
-                {'radius': 2.0},
-                {'altitude': 3.0},
-                {'omega': 0.5},
-                {'namespace': namespace}
-            ]
-        )
-    ])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "namespace",
+                default_value="px4_offboard",
+                description="Namespace of the nodes",
+            ),
+            Node(
+                package="px4_offboard",
+                namespace=namespace,
+                executable="offboard_control",
+                name="control",
+                parameters=[
+                    {"radius": 2.0},
+                    {"altitude": 3.0},
+                    {"omega": 0.5},
+                    {"namespace": namespace},
+                ],
+                remappings=[
+                    # (from, to)
+                    ("fmu/out/vehicle_status", "/fmu/out/vehicle_status"),
+                    ("fmu/in/offboard_control_mode", "/fmu/in/offboard_control_mode"),
+                    ("fmu/in/trajectory_setpoint", "/fmu/in/trajectory_setpoint"),
+                ],
+            ),
+        ]
+    )
