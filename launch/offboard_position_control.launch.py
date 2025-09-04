@@ -46,7 +46,11 @@ import tempfile
 
 def generate_launch_description():
 
-    # Declare the namespace argument (it can be provided when launching)
+    # Get path to the package and params file ---
+    pkg_share_dir = get_package_share_directory("px4_offboard")
+    params_file_path = os.path.join(pkg_share_dir, "config", "offboard_params.yaml")
+
+    # Declare the namespace argument
     namespace = LaunchConfiguration("namespace", default="px4_offboard")
 
     return LaunchDescription(
@@ -78,9 +82,7 @@ def generate_launch_description():
                 executable="offboard_control",
                 name="control",
                 parameters=[
-                    {"radius": 10.0},
-                    {"altitude": 5.0},
-                    {"omega": 0.5},
+                    params_file_path,
                     {"namespace": namespace},
                 ],
                 remappings=[

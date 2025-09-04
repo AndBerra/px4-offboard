@@ -27,6 +27,7 @@
 # OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
 # AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
@@ -44,9 +45,11 @@ import os
 
 
 def generate_launch_description():
-    package_dir = get_package_share_directory("px4_offboard")
+    # Get path to the package and params file ---
+    pkg_share_dir = get_package_share_directory("px4_offboard")
+    params_file_path = os.path.join(pkg_share_dir, "config", "offboard_params.yaml")
 
-    # Declare the namespace argument (it can be provided when launching)
+    # Declare the namespace argument
     namespace = LaunchConfiguration("namespace", default="px4_offboard")
 
     return LaunchDescription(
@@ -62,9 +65,7 @@ def generate_launch_description():
                 executable="offboard_control",
                 name="control",
                 parameters=[
-                    {"radius": 2.0},
-                    {"altitude": 3.0},
-                    {"omega": 0.5},
+                    params_file_path,
                     {"namespace": namespace},
                 ],
                 remappings=[

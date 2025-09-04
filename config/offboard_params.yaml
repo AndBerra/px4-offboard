@@ -1,0 +1,12 @@
+control:
+  ros__parameters:
+    # Trajectory parameters
+    radius: 10.0 # meter
+    altitude: 5.0 # meter
+    omega: 0.5 # rad/s
+
+    # Duration to hover after takeoff before starting the circle (in seconds)
+    hover_duration: 5.0
+
+    # Descent rate during the offboard landing sequence (in m/s, positive value)
+    landing_descent_rate: 0.5
