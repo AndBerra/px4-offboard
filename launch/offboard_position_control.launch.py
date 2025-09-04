@@ -47,8 +47,7 @@ import tempfile
 def generate_launch_description():
 
     # Get path to the package and params file ---
-    pkg_share_dir = get_package_share_directory("px4_offboard")
-    params_file_path = os.path.join(pkg_share_dir, "config", "offboard_params.yaml")
+    params_file_path = os.path.join("px4-offboard", "config", "offboard_params.yaml")
 
     # Declare the namespace argument
     namespace = LaunchConfiguration("namespace", default="px4_offboard")

@@ -6,7 +6,7 @@ services:
       dockerfile: px4_offboard.Dockerfile   
       args:
         ROS_DISTRO: humble
-        PX4_MSGS_VERSION: release/1.16
+        PX4_MSGS_VERSION: release/1.15
     image: px4-offboard:latest
     container_name: px4-offboard
     network_mode: host         
