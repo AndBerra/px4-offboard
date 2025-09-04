@@ -83,11 +83,10 @@ def generate_launch_description():
                 name="control",
                 parameters=[
                     params_file_path,
-                    {"namespace": namespace},
                 ],
                 remappings=[
                     # (from, to)
-                    ("fmu/out/vehicle_status", "/fmu/out/vehicle_status_v1"),
+                    ("fmu/out/vehicle_status", "/fmu/out/vehicle_status"),
                     ("fmu/in/offboard_control_mode", "/fmu/in/offboard_control_mode"),
                     ("fmu/in/trajectory_setpoint", "/fmu/in/trajectory_setpoint"),
                 ],

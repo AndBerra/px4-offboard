@@ -1,9 +1,9 @@
 control:
   ros__parameters:
     # Trajectory parameters
-    radius: 10.0 # meter
-    altitude: 5.0 # meter
-    omega: 0.5 # rad/s
+    radius: 4.0 # meter
+    altitude: 3.0 # meter
+    omega: 0.25 # rad/s
 
     # Duration to hover after takeoff before starting the circle (in seconds)
     hover_duration: 5.0

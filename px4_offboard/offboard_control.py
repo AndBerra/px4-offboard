@@ -106,16 +106,20 @@ class OffboardControl(Node):
         self.land_service = self.create_service(Trigger, "~/land", self.land_callback)
 
         # --- Parameters ---
-        self.declare_parameter("radius", 5.0)
-        self.declare_parameter("omega", 0.5)
-        self.declare_parameter("altitude", 5.0)
-        self.declare_parameter("hover_duration", 5.0)
-        self.declare_parameter("landing_descent_rate", 0.5)  # m/s
-        self.radius = self.get_parameter("radius").value
-        self.omega = self.get_parameter("omega").value
-        self.altitude = self.get_parameter("altitude").value
-        self.hover_duration = self.get_parameter("hover_duration").value
-        self.landing_descent_rate = self.get_parameter("landing_descent_rate").value
+        param_defaults = {
+            "radius": 5.0,
+            "omega": 0.5,
+            "altitude": 5.0,
+            "hover_duration": 5.0,
+            "landing_descent_rate": 0.5,
+        }
+        self.get_logger().info("--- Loading and Getting Parameters ---")
+        for name, default_value in param_defaults.items():
+            self.declare_parameter(name, default_value)
+
+            param_value = self.get_parameter(name).value
+            setattr(self, name, param_value)
+            self.get_logger().info(f"  - {name}: {param_value}")
 
         # --- State and Timing ---
         self.state = VehicleState.IDLE

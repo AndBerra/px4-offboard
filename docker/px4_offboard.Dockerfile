@@ -1,7 +1,9 @@
 ARG ROS_DISTRO=humble
+ARG PX4_MSGS_VERSION=release/1.16
 FROM ros:${ROS_DISTRO}-ros-base
 
-ARG ROS_DISTRO=humble
+ARG ROS_DISTRO
+ARG PX4_MSGS_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -33,8 +35,7 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc \
 
 # Create ws and clone dep
 WORKDIR /ros2_ws/src
-RUN git clone https://github.com/Jaeyoung-Lim/px4-offboard.git
-RUN git clone --branch release/1.16 https://github.com/PX4/px4_msgs.git
+RUN git clone --branch ${PX4_MSGS_VERSION} https://github.com/PX4/px4_msgs.git
 
 
 # install dep and build

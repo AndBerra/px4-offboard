@@ -1,2 +1,7 @@
 *.pyc
 .vscode/*
+docker/build/**
+docker/install/**
+docker/log/**
+docker/build/COLCON_IGNORE
+.gitignore
