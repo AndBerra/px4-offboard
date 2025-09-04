@@ -46,5 +46,10 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && colcon build
 # source 
 RUN echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
 
+# entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
 # default cmd 
 CMD ["bash"]
