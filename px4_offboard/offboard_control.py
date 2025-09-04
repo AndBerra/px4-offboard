@@ -50,6 +50,7 @@ from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import TrajectorySetpoint
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleCommand
+from px4_msgs.msg import VehicleAttitude
 from std_srvs.srv import Trigger
 
 
@@ -67,7 +68,7 @@ class OffboardControl(Node):
     def __init__(self):
         super().__init__("hover_circle_land_node")
 
-        # --- QoS Profiles for Control Data ---
+        # --- QoS Profiles ---
         qos_profile_control = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             durability=QoSDurabilityPolicy.VOLATILE,
@@ -81,22 +82,23 @@ class OffboardControl(Node):
             depth=10,
         )
 
-        # --- Publishers ---
+        # --- Publishers & Subscribers ---
         self.publisher_offboard_mode = self.create_publisher(
             OffboardControlMode, "fmu/in/offboard_control_mode", qos_profile_control
         )
         self.publisher_trajectory = self.create_publisher(
             TrajectorySetpoint, "fmu/in/trajectory_setpoint", qos_profile_control
         )
-        self.vehicle_command_publisher = self.create_publisher(
-            VehicleCommand, "fmu/in/vehicle_command", qos_profile_control
-        )
-
-        # --- Subscribers ---
         self.status_sub = self.create_subscription(
             VehicleStatus,
             "fmu/out/vehicle_status",
             self.vehicle_status_callback,
+            qos_profile_sub,
+        )
+        self.attitude_sub = self.create_subscription(
+            VehicleAttitude,
+            "fmu/out/vehicle_attitude",
+            self.attitude_callback,
             qos_profile_sub,
         )
 
@@ -105,13 +107,15 @@ class OffboardControl(Node):
 
         # --- Parameters ---
         self.declare_parameter("radius", 5.0)
-        self.declare_parameter("omega", 0.5)  # rad/s
+        self.declare_parameter("omega", 0.5)
         self.declare_parameter("altitude", 5.0)
-        self.declare_parameter("hover_duration", 5.0)  # seconds
+        self.declare_parameter("hover_duration", 5.0)
+        self.declare_parameter("landing_descent_rate", 0.5)  # m/s
         self.radius = self.get_parameter("radius").value
         self.omega = self.get_parameter("omega").value
         self.altitude = self.get_parameter("altitude").value
         self.hover_duration = self.get_parameter("hover_duration").value
+        self.landing_descent_rate = self.get_parameter("landing_descent_rate").value
 
         # --- State and Timing ---
         self.state = VehicleState.IDLE
@@ -119,6 +123,10 @@ class OffboardControl(Node):
         self.arming_state = VehicleStatus.ARMING_STATE_DISARMED
         self.theta = 0.0
         self.hover_start_time = None
+        self.current_yaw = 0.0
+        self.initial_yaw = 0.0
+        self.landing_position = [0.0, 0.0, 0.0]
+        self.landing_yaw = 0.0
 
         timer_period = 0.02  # 50Hz
         self.dt = timer_period
@@ -128,51 +136,65 @@ class OffboardControl(Node):
         )
 
     def vehicle_status_callback(self, msg):
-        self.get_logger().debug(
-            f"Vehicle Status Update: Nav State={msg.nav_state}, Arming State={msg.arming_state}"
-        )
         self.nav_state = msg.nav_state
         self.arming_state = msg.arming_state
 
+    def attitude_callback(self, msg):
+        self.current_yaw = self.quaternion_to_euler_yaw(msg.q)
+
+    def quaternion_to_euler_yaw(self, q):
+        t3 = +2.0 * (q[0] * q[3] + q[1] * q[2])
+        t4 = +1.0 - 2.0 * (q[2] * q[2] + q[3] * q[3])
+        return np.arctan2(t3, t4)
+
     def land_callback(self, request, response):
-        """Service callback to initiate landing."""
+        """Service callback to initiate landing from offboard mode."""
         if self.state == VehicleState.CIRCLING or self.state == VehicleState.HOVERING:
+            # --- Capture current position and yaw to land there ---
+            self.landing_position = [
+                self.radius * np.cos(self.theta),
+                self.radius * np.sin(self.theta),
+                -self.altitude,
+            ]
+            self.landing_yaw = self.theta + np.pi / 2.0
+
+            # If we are in the initial hover, the position is at origin
+            if self.state == VehicleState.HOVERING:
+                self.landing_position = [0.0, 0.0, -self.altitude]
+                # Use last commanded yaw from gradual turn
+                hover_elapsed_time = (
+                    self.get_clock().now() - self.hover_start_time
+                ).nanoseconds / 1e9
+                t = min(hover_elapsed_time / self.hover_duration, 1.0)
+                delta_yaw = -self.initial_yaw  # Target is 0.0
+                if delta_yaw > np.pi:
+                    delta_yaw -= 2 * np.pi
+                elif delta_yaw < -np.pi:
+                    delta_yaw += 2 * np.pi
+                self.landing_yaw = self.initial_yaw + delta_yaw * t
+
             self.state = VehicleState.LANDING
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
-            self.get_logger().info("Land command issued.")
+            self.get_logger().info(
+                f"Offboard landing initiated at position {self.landing_position[0]:.2f}, "
+                f"{self.landing_position[1]:.2f} with yaw {np.rad2deg(self.landing_yaw):.1f} deg"
+            )
             response.success = True
-            response.message = "Landing sequence initiated."
+            response.message = "Offboard landing sequence initiated."
         else:
             response.success = False
             response.message = f"Cannot land from current state: {self.state.name}"
             self.get_logger().warn(response.message)
         return response
 
-    def publish_vehicle_command(self, command, **params):
-        """Publish a vehicle command."""
-        msg = VehicleCommand(
-            timestamp=int(self.get_clock().now().nanoseconds / 1000),
-            param1=params.get("param1", 0.0),
-            param2=params.get("param2", 0.0),
-            command=command,
-            target_system=1,
-            target_component=1,
-            source_system=1,
-            source_component=1,
-            from_external=True,
-        )
-        self.vehicle_command_publisher.publish(msg)
-
-    def publish_hover_setpoint(self):
-        """Publishes a setpoint to hover at the origin."""
+    def publish_hover_setpoint(self, yaw):
         msg = TrajectorySetpoint()
         msg.position = [0.0, 0.0, -self.altitude]
-        msg.yaw = 0.0
+        msg.yaw = yaw
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.publisher_trajectory.publish(msg)
 
     def publish_circling_setpoint(self):
-        """Publishes a setpoint to fly in a circle."""
+        self.theta += self.omega * self.dt
         msg = TrajectorySetpoint()
         msg.position = [
             self.radius * np.cos(self.theta),
@@ -182,7 +204,21 @@ class OffboardControl(Node):
         msg.yaw = self.theta + np.pi / 2.0
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.publisher_trajectory.publish(msg)
-        self.theta += self.omega * self.dt
+
+    def publish_landing_setpoint(self):
+        """Commands the drone to descend at its captured landing position."""
+        # Decrease the Z component of the landing position over time
+        self.landing_position[2] += self.landing_descent_rate * self.dt
+        # Make sure we don't command to go through the ground
+        self.landing_position[2] = min(
+            self.landing_position[2], 0.5
+        )  # Target slightly above ground
+
+        msg = TrajectorySetpoint()
+        msg.position = self.landing_position
+        msg.yaw = self.landing_yaw
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.publisher_trajectory.publish(msg)
 
     def cmdloop_callback(self):
         offboard_msg = OffboardControlMode(
@@ -200,27 +236,35 @@ class OffboardControl(Node):
 
         if self.state == VehicleState.IDLE:
             if is_armed and is_offboard:
-                self.get_logger().info("Takeoff conditions met. Switching to HOVERING.")
+                self.get_logger().info(
+                    "Takeoff conditions met. Starting gradual turn to North."
+                )
                 self.state = VehicleState.HOVERING
                 self.hover_start_time = self.get_clock().now()
-            else:
-                if self.get_clock().now().nanoseconds % (1 * 1e9) < (self.dt * 1e9):
-                    self.get_logger().warn(
-                        f"Waiting for arm and offboard mode. "
-                        f"Is Armed: {is_armed}, Is Offboard: {is_offboard}"
-                    )
+                self.initial_yaw = self.current_yaw
 
         elif self.state == VehicleState.HOVERING:
-            self.publish_hover_setpoint()
             hover_elapsed_time = (
                 self.get_clock().now() - self.hover_start_time
             ).nanoseconds / 1e9
+            t = min(hover_elapsed_time / self.hover_duration, 1.0)
+            target_yaw = 0.0
+            delta_yaw = target_yaw - self.initial_yaw
+            if delta_yaw > np.pi:
+                delta_yaw -= 2 * np.pi
+            elif delta_yaw < -np.pi:
+                delta_yaw += 2 * np.pi
+            interpolated_yaw = self.initial_yaw + delta_yaw * t
+            self.publish_hover_setpoint(yaw=interpolated_yaw)
+
             self.get_logger().info(
-                f"Hovering... {hover_elapsed_time:.1f}s / {self.hover_duration}s"
+                f"Hovering and turning... Commanded Yaw: {np.rad2deg(interpolated_yaw):.1f} deg"
             )
 
-            if hover_elapsed_time >= self.hover_duration:
-                self.get_logger().info("Hover complete. Switching to CIRCLING.")
+            if t >= 1.0:
+                self.get_logger().info(
+                    "Hover and turn complete. Switching to CIRCLING."
+                )
                 self.state = VehicleState.CIRCLING
 
         elif self.state == VehicleState.CIRCLING:
@@ -230,15 +274,16 @@ class OffboardControl(Node):
             )
 
         elif self.state == VehicleState.LANDING:
-            self.get_logger().info("Landing in progress...")
+            self.publish_landing_setpoint()
+            self.get_logger().info(
+                f"Landing... Target Alt: {-self.landing_position[2]:.2f} m"
+            )
+
             if not is_armed:
                 self.get_logger().info(
                     "Landing complete. Vehicle has disarmed. Returning to IDLE."
                 )
                 self.state = VehicleState.IDLE
-
-        else:
-            self.get_logger().error("Reached an unknown state!")
 
 
 def main(args=None):
