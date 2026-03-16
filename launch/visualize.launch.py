@@ -96,21 +96,42 @@ def patch_rviz_config(original_config_path, namespace):
 
 
 def launch_setup(context, *args, **kwargs):
-    """
-    Function to set up the launch context and patch the RViz configuration.
-    """
-    namespace = LaunchConfiguration("namespace").perform(context)
-    rviz_config_path = os.path.join(
-        get_package_share_directory("px4_offboard"), "visualize.rviz"
-    )
+    namespace = context.launch_configurations["namespace"]
+    rviz_config_arg = context.launch_configurations.get("rviz_config", "").strip()
+
+    if rviz_config_arg:
+        rviz_config_path = rviz_config_arg
+    else:
+        rviz_config_path = os.path.join(
+            get_package_share_directory("px4_offboard"), "visualize.rviz"
+        )
+
+    print(f"[launch] Using RViz config: {rviz_config_path}")
+
+    # validate
+    if not os.path.isfile(rviz_config_path):
+        raise FileNotFoundError(f"RViz config not found: {rviz_config_path}")
+
     patched_config = patch_rviz_config(rviz_config_path, namespace)
 
     return [
+        Node(
+            package="px4_offboard",
+            namespace=namespace,
+            executable="visualizer",
+            name="visualizer",
+            parameters=[{"namespace": namespace}],
+            remappings=[
+                ("fmu/out/vehicle_attitude", "/fmu/out/vehicle_attitude"),
+                ("fmu/out/vehicle_local_position", "/fmu/out/vehicle_local_position"),
+                ("fmu/in/trajectory_setpoint", "/fmu/in/trajectory_setpoint"),
+            ],
+        ),
         Node(
             package="rviz2",
             namespace="",
             executable="rviz2",
             name="rviz2",
             arguments=["-d", patched_config],
-        )
+        ),
     ]
